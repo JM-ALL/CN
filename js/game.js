@@ -1,6 +1,5 @@
 let Game = {
     state: null,
-    currentTab: 'welfare',
     currentModal: null,
     battleTimer: null,
     bossTimer: null,
@@ -121,8 +120,6 @@ let Game = {
 
     renderAll() {
         this.renderTopBar();
-        this.renderTabBar();
-        this.renderTabContent();
         this.renderBattleArea();
         this.renderBottomBar();
     },
@@ -138,197 +135,22 @@ let Game = {
         `;
     },
 
-    renderTabBar() {
-        const tabBar = document.getElementById('tabBar');
-        tabBar.innerHTML = `
-            <button class="tab-btn ${this.currentTab === 'welfare' ? 'active' : ''}" onclick="Game.switchTab('welfare')">福利</button>
-            <button class="tab-btn ${this.currentTab === 'shop' ? 'active' : ''}" onclick="Game.switchTab('shop')">商城</button>
-            <button class="tab-btn ${this.currentTab === 'boss' ? 'active' : ''}" onclick="Game.switchTab('boss')">Boss</button>
-        `;
-    },
-
-    switchTab(tab) {
-        this.currentTab = tab;
-        this.renderTabBar();
-        this.renderTabContent();
-    },
-
-    renderTabContent() {
-        const content = document.getElementById('tabContent');
-        if (this.currentTab === 'welfare') {
-            this.renderWelfareTab(content);
-        } else if (this.currentTab === 'shop') {
-            this.renderShopTab(content);
-        } else if (this.currentTab === 'boss') {
-            this.renderBossTab(content);
-        }
-    },
-
-    renderWelfareTab(container) {
-        const s = this.state;
-        const today = Utils.todayStr();
-        const canSignIn = s.signInLastDate !== today;
-        const canClaimCard = (s.hasPermanentCard || s.hasSupremeCard) && s.lastCardClaimDate !== today;
-        const signDay = Math.min((s.signInDays % 7) + 1, 7);
-
-        container.innerHTML = `
-            <div class="welfare-section">
-                <div class="section-title">📅 每日签到</div>
-                <button class="welfare-btn ${canSignIn ? '' : 'disabled'}" onclick="Game.doSignIn()" ${canSignIn ? '' : 'disabled'}>
-                    ${canSignIn ? `第${signDay}天签到` : '✓ 今日已签到'}
-                </button>
-            </div>
-            <div class="welfare-section">
-                <div class="section-title">💳 永久卡 ${s.hasPermanentCard ? '✓已激活' : ''}</div>
-                ${s.hasPermanentCard ? 
-                    `<button class="welfare-btn ${canClaimCard ? '' : 'disabled'}" onclick="Game.claimCard()" ${canClaimCard ? '' : 'disabled'}>
-                        ${canClaimCard ? '领取每日奖励' : '✓ 今日已领取'}
-                    </button>` :
-                    `<button class="welfare-btn buy" onclick="Game.buyPermanentCard()">
-                        激活永久卡 (🏆${Utils.numFormat(GameData.welfare.permanentCard.price)})
-                    </button>`
-                }
-            </div>
-            <div class="welfare-section">
-                <div class="section-title">👑 至尊永久卡 ${s.hasSupremeCard ? '✓已激活' : ''}</div>
-                ${s.hasSupremeCard ? 
-                    `<div style="color:#ff8c00;font-size:13px;margin-bottom:8px;">已激活，每日自动额外领取</div>` :
-                    `<button class="welfare-btn buy" onclick="Game.buySupremeCard()">
-                        激活至尊卡 (🏆${Utils.numFormat(GameData.welfare.supremeCard.price)})
-                    </button>`
-                }
-            </div>
-            <div class="welfare-section">
-                <div class="section-title">🎁 礼包码</div>
-                <div style="display:flex;gap:8px;">
-                    <input type="text" id="giftCodeInput" class="code-input" placeholder="输入礼包码（如VIP666）">
-                    <button class="welfare-btn" style="width:80px;padding:8px;" onclick="Game.redeemCode()">兑换</button>
-                </div>
-            </div>
-        `;
-    },
-
-    renderShopTab(container) {
-        const s = this.state;
-        container.innerHTML = `
-            <div style="margin-bottom:12px;color:#ccc;font-size:13px;">🏆 当前黄金: ${Utils.numFormat(s.huangjin)}</div>
-            <div>
-                ${GameData.shop.map(item => `
-                    <div class="shop-item">
-                        <div style="font-size:32px;">${item.icon}</div>
-                        <div style="flex:1;margin-left:12px;">
-                            <div style="font-weight:bold;">${item.name}</div>
-                            <div style="font-size:12px;color:#999;">${item.desc}</div>
-                        </div>
-                        <button class="shop-buy-btn" onclick="Game.buyItem('${item.id}')" ${s.huangjin < item.price ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
-                            🏆${Utils.numFormat(item.price)}
-                        </button>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    },
-
-    renderBossTab(container) {
-        const s = this.state;
-        const b = GameData.boss;
-        const cooldownLeft = this.bossBattleCooldown > Date.now() ? Math.ceil((this.bossBattleCooldown - Date.now()) / 1000) : 0;
-        
-        let html = `<div style="margin-bottom:10px;font-size:13px;color:#ccc;">`;
-        if (this.inBossBattle) {
-            html += `⚔️ 正在挑战Boss中...`;
-        } else if (cooldownLeft > 0) {
-            html += `⏱️ 冷却中: ${cooldownLeft}秒`;
-        } else {
-            html += `当前等级 Lv.${Utils.numFormat(s.level)}，选择难度挑战`;
-        }
-        html += `</div>`;
-        
-        html += `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">`;
-        for (let d = 1; d <= b.maxDifficulty; d++) {
-            const mult = Math.pow(b.rewardMult, d - 1);
-            const materialR = Math.floor(b.materialBase * mult);
-            const yuanbaoR = Math.floor(b.yuanbaoBasePerLevel * s.level * mult);
-            const expR = Math.floor(b.expBasePerLevel * s.level * mult);
-            const canChallenge = !this.inBossBattle && cooldownLeft === 0;
-            html += `
-                <div class="boss-item" style="flex-direction:column;text-align:center;padding:10px;">
-                    <div style="font-size:24px;">👹</div>
-                    <div style="font-weight:bold;color:#ff6b6b;font-size:13px;">${d}阶</div>
-                    <div class="boss-reward" style="font-size:10px;margin-top:3px;">
-                        ⚙️${Utils.numFormat(materialR)}<br>
-                        💎${Utils.numFormat(yuanbaoR)}<br>
-                        ⭐${Utils.numFormat(expR)}
-                    </div>
-                    <button class="welfare-btn boss-btn" style="width:100%;padding:5px;font-size:12px;margin-top:6px;" 
-                        onclick="Game.challengeBoss(${d})" ${canChallenge ? '' : 'disabled'}>
-                        挑战
-                    </button>
-                </div>
-            `;
-        }
-        html += `</div>`;
-        
-        container.innerHTML = html;
-    },
-
-    challengeBoss(difficulty) {
-        Battle.startBossBattle(this, difficulty);
-        this.renderAll();
-    },
-
-    renderBattleArea() {
-        const s = this.state;
-        let displayMonster = this.inBossBattle ? this.currentBoss : this.currentMonster;
-        
-        const area = document.getElementById('battleArea');
-        
-        const playerHpPercent = Math.max(0, (s.hp / s.maxHp) * 100);
-        const monsterHpPercent = displayMonster ? Math.max(0, (displayMonster.currentHp / displayMonster.hp) * 100) : 100;
-        const mName = displayMonster ? displayMonster.name : '寻找目标...';
-        const mIsBoss = this.inBossBattle;
-        const expNeeded = Battle.getExpNeeded(s.level);
-        const expPercent = Math.min(100, (s.exp / expNeeded) * 100);
-
-        area.innerHTML = `
-            <div style="text-align:center;font-size:12px;color:#aaa;margin-bottom:5px;">
-                Lv.${Utils.numFormat(s.level)} | 经验: ${Utils.numFormat(s.exp)}/${Utils.numFormat(expNeeded)}
-                <div class="exp-bar"><div class="exp-fill" style="width:${expPercent}%"></div></div>
-            </div>
-            <div class="battle-stage">
-                <div class="combatant player">
-                    <div class="char-icon" style="color:#4CAF50;">🧙</div>
-                    <div class="char-name">玩家</div>
-                    <div class="hp-bar">
-                        <div class="hp-fill" style="width:${playerHpPercent}%"></div>
-                        <div class="hp-text">${Utils.numFormat(Math.floor(Math.max(0,s.hp)))}/${Utils.numFormat(s.maxHp)}</div>
-                    </div>
-                </div>
-                <div class="vs-text">VS</div>
-                <div class="combatant monster ${mIsBoss ? 'boss' : ''}">
-                    <div class="char-icon">${mIsBoss ? '👹' : '👾'}</div>
-                    <div class="char-name" style="${mIsBoss ? 'color:#ff4444;' : ''}">${mName}${mIsBoss ? ' [BOSS]' : ''}</div>
-                    <div class="hp-bar">
-                        <div class="hp-fill ${mIsBoss ? 'boss-hp' : ''}" style="width:${monsterHpPercent}%"></div>
-                        <div class="hp-text">${displayMonster ? Utils.numFormat(Math.floor(Math.max(0,displayMonster.currentHp))) : '0'}/${displayMonster ? Utils.numFormat(displayMonster.hp) : '0'}</div>
-                    </div>
-                </div>
-            </div>
-            <div class="battle-log">
-                ${this.state.battleLog.map(log => `<div class="log-line">${log}</div>`).join('')}
-            </div>
-        `;
-    },
-
     renderBottomBar() {
         const bar = document.getElementById('bottomBar');
         bar.innerHTML = `
-            <button class="bottom-btn" onclick="Game.openModal('player')">👤 人物</button>
-            <button class="bottom-btn" onclick="Game.openModal('bag')">🎒 背包</button>
+            <button class="bottom-btn" onclick="Game.openModal('player')">👤<br>人物</button>
+            <button class="bottom-btn" onclick="Game.openModal('bag')">🎒<br>背包</button>
+            <button class="bottom-btn" onclick="Game.openModal('welfare')">🎁<br>福利</button>
+            <button class="bottom-btn" onclick="Game.openModal('shop')">🛒<br>商城</button>
+            <button class="bottom-btn" onclick="Game.openModal('boss')">👹<br>Boss</button>
         `;
     },
 
     openModal(type) {
+        if (type !== 'boss' && this.inBossBattle) {
+            this.addLog('Boss战斗中，请稍后...');
+            return;
+        }
         this.currentModal = type;
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modal');
@@ -338,6 +160,12 @@ let Game = {
             this.renderPlayerModal(modal);
         } else if (type === 'bag') {
             this.renderBagModal(modal);
+        } else if (type === 'welfare') {
+            this.renderWelfareModal(modal);
+        } else if (type === 'shop') {
+            this.renderShopModal(modal);
+        } else if (type === 'boss') {
+            this.renderBossModal(modal);
         }
     },
 
@@ -426,6 +254,184 @@ let Game = {
         `;
     },
 
+    renderWelfareModal(modal) {
+        const s = this.state;
+        const today = Utils.todayStr();
+        const canSignIn = s.signInLastDate !== today;
+        const canClaimCard = (s.hasPermanentCard || s.hasSupremeCard) && s.lastCardClaimDate !== today;
+        const signDay = Math.min((s.signInDays % 7) + 1, 7);
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                <span>🎁 福利中心</span>
+                <button class="close-btn" onclick="Game.closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="welfare-section">
+                    <div class="section-title">📅 每日签到</div>
+                    <button class="welfare-btn ${canSignIn ? '' : 'disabled'}" onclick="Game.doSignIn()" ${canSignIn ? '' : 'disabled'}>
+                        ${canSignIn ? `第${signDay}天签到` : '✓ 今日已签到'}
+                    </button>
+                </div>
+                <div class="welfare-section">
+                    <div class="section-title">💳 永久卡 ${s.hasPermanentCard ? '✓已激活' : ''}</div>
+                    ${s.hasPermanentCard ? 
+                        `<button class="welfare-btn ${canClaimCard ? '' : 'disabled'}" onclick="Game.claimCard()" ${canClaimCard ? '' : 'disabled'}>
+                            ${canClaimCard ? '领取每日奖励' : '✓ 今日已领取'}
+                        </button>` :
+                        `<button class="welfare-btn buy" onclick="Game.buyPermanentCard()">
+                            激活永久卡 (🏆${Utils.numFormat(GameData.welfare.permanentCard.price)})
+                        </button>`
+                    }
+                </div>
+                <div class="welfare-section">
+                    <div class="section-title">👑 至尊永久卡 ${s.hasSupremeCard ? '✓已激活' : ''}</div>
+                    ${s.hasSupremeCard ? 
+                        `<div style="color:#ff8c00;font-size:13px;margin-bottom:8px;">已激活，每日自动额外领取</div>` :
+                        `<button class="welfare-btn buy" onclick="Game.buySupremeCard()">
+                            激活至尊卡 (🏆${Utils.numFormat(GameData.welfare.supremeCard.price)})
+                        </button>`
+                    }
+                </div>
+                <div class="welfare-section">
+                    <div class="section-title">🎁 礼包码</div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="giftCodeInput" class="code-input" placeholder="输入礼包码（如VIP666）">
+                        <button class="welfare-btn" style="width:80px;padding:8px;" onclick="Game.redeemCode()">兑换</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderShopModal(modal) {
+        const s = this.state;
+        modal.innerHTML = `
+            <div class="modal-header">
+                <span>🛒 商城</span>
+                <button class="close-btn" onclick="Game.closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:12px;color:#ccc;font-size:13px;">🏆 当前黄金: ${Utils.numFormat(s.huangjin)}</div>
+                <div>
+                    ${GameData.shop.map(item => `
+                        <div class="shop-item">
+                            <div style="font-size:32px;">${item.icon}</div>
+                            <div style="flex:1;margin-left:12px;">
+                                <div style="font-weight:bold;">${item.name}</div>
+                                <div style="font-size:12px;color:#999;">${item.desc}</div>
+                            </div>
+                            <button class="shop-buy-btn" onclick="Game.buyItem('${item.id}')" ${s.huangjin < item.price ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                                🏆${Utils.numFormat(item.price)}
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderBossModal(modal) {
+        const s = this.state;
+        const b = GameData.boss;
+        const cooldownLeft = this.bossBattleCooldown > Date.now() ? Math.ceil((this.bossBattleCooldown - Date.now()) / 1000) : 0;
+        
+        let headerHtml = '';
+        if (this.inBossBattle) {
+            headerHtml = `⚔️ 正在挑战Boss中...`;
+        } else if (cooldownLeft > 0) {
+            headerHtml = `⏱️ 冷却中: ${cooldownLeft}秒`;
+        } else {
+            headerHtml = `当前等级 Lv.${Utils.numFormat(s.level)}，选择难度挑战`;
+        }
+
+        let bossGrid = '';
+        for (let d = 1; d <= b.maxDifficulty; d++) {
+            const mult = Math.pow(b.rewardMult, d - 1);
+            const materialR = Math.floor(b.materialBase * mult);
+            const yuanbaoR = Math.floor(b.yuanbaoBasePerLevel * s.level * mult);
+            const expR = Math.floor(b.expBasePerLevel * s.level * mult);
+            const canChallenge = !this.inBossBattle && cooldownLeft === 0;
+            bossGrid += `
+                <div class="boss-item" style="flex-direction:column;text-align:center;padding:10px;">
+                    <div style="font-size:24px;">👹</div>
+                    <div style="font-weight:bold;color:#ff6b6b;font-size:13px;">${d}阶</div>
+                    <div class="boss-reward" style="font-size:10px;margin-top:3px;">
+                        ⚙️${Utils.numFormat(materialR)}<br>
+                        💎${Utils.numFormat(yuanbaoR)}<br>
+                        ⭐${Utils.numFormat(expR)}
+                    </div>
+                    <button class="welfare-btn boss-btn" style="width:100%;padding:5px;font-size:12px;margin-top:6px;" 
+                        onclick="Game.challengeBoss(${d})" ${canChallenge ? '' : 'disabled'}>
+                        挑战
+                    </button>
+                </div>
+            `;
+        }
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                <span>👹 Boss挑战</span>
+                <button class="close-btn" onclick="Game.closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:10px;font-size:13px;color:#ccc;text-align:center;">${headerHtml}</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    ${bossGrid}
+                </div>
+            </div>
+        `;
+    },
+
+    challengeBoss(difficulty) {
+        Battle.startBossBattle(this, difficulty);
+        this.closeModal();
+        this.renderAll();
+    },
+
+    renderBattleArea() {
+        const s = this.state;
+        let displayMonster = this.inBossBattle ? this.currentBoss : this.currentMonster;
+        
+        const area = document.getElementById('battleArea');
+        
+        const playerHpPercent = Math.max(0, (s.hp / s.maxHp) * 100);
+        const monsterHpPercent = displayMonster ? Math.max(0, (displayMonster.currentHp / displayMonster.hp) * 100) : 100;
+        const mName = displayMonster ? displayMonster.name : '寻找目标...';
+        const mIsBoss = this.inBossBattle;
+        const expNeeded = Battle.getExpNeeded(s.level);
+        const expPercent = Math.min(100, (s.exp / expNeeded) * 100);
+
+        area.innerHTML = `
+            <div style="text-align:center;font-size:12px;color:#aaa;margin-bottom:5px;">
+                Lv.${Utils.numFormat(s.level)} | 经验: ${Utils.numFormat(s.exp)}/${Utils.numFormat(expNeeded)}
+                <div class="exp-bar"><div class="exp-fill" style="width:${expPercent}%"></div></div>
+            </div>
+            <div class="battle-stage">
+                <div class="combatant player">
+                    <div class="char-icon" style="color:#4CAF50;">🧙</div>
+                    <div class="char-name">玩家</div>
+                    <div class="hp-bar">
+                        <div class="hp-fill" style="width:${playerHpPercent}%"></div>
+                        <div class="hp-text">${Utils.numFormat(Math.floor(Math.max(0,s.hp)))}/${Utils.numFormat(s.maxHp)}</div>
+                    </div>
+                </div>
+                <div class="vs-text">VS</div>
+                <div class="combatant monster ${mIsBoss ? 'boss' : ''}">
+                    <div class="char-icon">${mIsBoss ? '👹' : '👾'}</div>
+                    <div class="char-name" style="${mIsBoss ? 'color:#ff4444;' : ''}">${mName}${mIsBoss ? ' [BOSS]' : ''}</div>
+                    <div class="hp-bar">
+                        <div class="hp-fill ${mIsBoss ? 'boss-hp' : ''}" style="width:${monsterHpPercent}%"></div>
+                        <div class="hp-text">${displayMonster ? Utils.numFormat(Math.floor(Math.max(0,displayMonster.currentHp))) : '0'}/${displayMonster ? Utils.numFormat(displayMonster.hp) : '0'}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="battle-log">
+                ${this.state.battleLog.map(log => `<div class="log-line">${log}</div>`).join('')}
+            </div>
+        `;
+    },
+
     doEnhance() {
         const s = this.state;
         const e = GameData.equip;
@@ -510,6 +516,7 @@ let Game = {
         this.addLog(`📅 签到成功！第${dayIdx+1}天`);
         this.saveState();
         this.renderAll();
+        if (this.currentModal === 'welfare') this.openModal('welfare');
     },
 
     buyPermanentCard() {
@@ -524,6 +531,7 @@ let Game = {
         this.addLog('💳 永久卡激活成功！');
         this.saveState();
         this.renderAll();
+        if (this.currentModal === 'welfare') this.openModal('welfare');
     },
 
     buySupremeCard() {
@@ -538,6 +546,7 @@ let Game = {
         this.addLog('👑 至尊永久卡激活成功！');
         this.saveState();
         this.renderAll();
+        if (this.currentModal === 'welfare') this.openModal('welfare');
     },
 
     claimCard() {
@@ -570,6 +579,7 @@ let Game = {
         this.addLog('💳 领取每日卡奖励！');
         this.saveState();
         this.renderAll();
+        if (this.currentModal === 'welfare') this.openModal('welfare');
     },
 
     redeemCode() {
@@ -599,6 +609,7 @@ let Game = {
         input.value = '';
         this.saveState();
         this.renderAll();
+        if (this.currentModal === 'welfare') this.openModal('welfare');
     },
 
     buyItem(itemId) {
@@ -619,6 +630,7 @@ let Game = {
         
         this.saveState();
         this.renderAll();
+        if (this.currentModal === 'shop') this.openModal('shop');
     }
 };
 

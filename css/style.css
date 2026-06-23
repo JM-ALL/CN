@@ -65,40 +65,6 @@ body {
     font-size: clamp(14px, 4vw, 20px);
 }
 
-.tab-bar {
-    height: 6%;
-    min-height: 6%;
-    background: #15152a;
-    display: flex;
-    border-bottom: 1px solid #444;
-}
-
-.tab-btn {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: #888;
-    font-size: clamp(12px, 3.5vw, 16px);
-    font-weight: bold;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    transition: all 0.2s;
-}
-
-.tab-btn.active {
-    color: #ffd700;
-    border-bottom-color: #ffd700;
-    background: rgba(255, 215, 0, 0.08);
-}
-
-.tab-content {
-    height: 22%;
-    min-height: 22%;
-    background: #121224;
-    overflow-y: auto;
-    padding: clamp(6px, 2vw, 12px);
-}
-
 .battle-area {
     flex: 1;
     background: linear-gradient(180deg, #0a0a15 0%, #151528 100%);
@@ -204,8 +170,8 @@ body {
 }
 
 .bottom-bar {
-    height: 8%;
-    min-height: 8%;
+    height: 10%;
+    min-height: 10%;
     background: linear-gradient(0deg, #252545 0%, #1a1a2e 100%);
     display: flex;
     border-top: 2px solid #ffd700;
@@ -216,10 +182,16 @@ body {
     background: transparent;
     border: none;
     color: #ddd;
-    font-size: clamp(13px, 4vw, 18px);
+    font-size: clamp(10px, 2.8vw, 13px);
     font-weight: bold;
     cursor: pointer;
     transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    line-height: 1.2;
 }
 
 .bottom-btn:hover {
