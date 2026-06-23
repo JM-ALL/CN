@@ -77,21 +77,27 @@ let Game = {
     recalcStats() {
         const s = this.state;
         const e = GameData.equip;
+        const p = GameData.player;
         
-        const levelHp = s.level * GameData.player.perLevelHp;
-        const levelAtk = s.level * GameData.player.perLevelAtk;
-        const levelDef = s.level * GameData.player.perLevelDef;
+        const baseHp = p.initHp + (s.level - 1) * p.perLevelHp;
+        const baseAtk = p.initAtk + (s.level - 1) * p.perLevelAtk;
+        const baseDef = p.initDef + (s.level - 1) * p.perLevelDef;
         
         const equipHp = e.baseHp * s.equipEnhance * s.equipStar;
         const equipAtk = e.baseAtk * s.equipEnhance * s.equipStar;
         const equipDef = e.baseDef * s.equipEnhance * s.equipStar;
         
-        s.maxHp = levelHp + equipHp;
-        s.atk = levelAtk + equipAtk;
-        s.def = levelDef + equipDef;
+        let mult = 1;
+        if (s.hasPermanentCard) mult *= 1e5;
+        if (s.hasSupremeCard) mult *= 1e10;
+        
+        s.maxHp = Math.floor((baseHp + equipHp) * mult);
+        s.atk = Math.floor((baseAtk + equipAtk) * mult);
+        s.def = Math.floor((baseDef + equipDef) * mult);
         s.power = s.maxHp + s.atk * 10 + s.def * 5;
         
         if (s.hp > s.maxHp) s.hp = s.maxHp;
+        if (s.hp <= 0) s.hp = s.maxHp;
     },
 
     addLog(msg) {
@@ -177,11 +183,20 @@ let Game = {
     renderPlayerModal(modal) {
         const s = this.state;
         const e = GameData.equip;
-        const enhanceCostGold = Math.floor(e.enhanceCostGoldBase * Math.pow(e.enhanceCostGoldGrowth, s.equipEnhance - 1));
-        const starCostYuanbao = Math.floor(e.starCostYuanbaoBase * Math.pow(e.starCostYuanbaoGrowth, s.equipStar - 1));
+        const enhanceCostGold = s.equipEnhance;
+        const starCostYuanbao = s.equipStar;
         const canEnhance = s.gold >= enhanceCostGold && s.material >= 1 && s.equipEnhance < e.maxEnhance;
         const canStar = s.yuanbao >= starCostYuanbao && s.material >= 1 && s.equipStar < e.maxStar;
         const expNeeded = Battle.getExpNeeded(s.level);
+        
+        let cardInfo = '';
+        if (s.hasPermanentCard && s.hasSupremeCard) {
+            cardInfo = '永久卡×1e5 · 至尊卡×1e10 = 总×1e15';
+        } else if (s.hasPermanentCard) {
+            cardInfo = '永久卡×1e5';
+        } else if (s.hasSupremeCard) {
+            cardInfo = '至尊卡×1e10';
+        }
         
         modal.innerHTML = `
             <div class="modal-header">
@@ -195,6 +210,7 @@ let Game = {
                         经验: ${Utils.numFormat(s.exp)}/${Utils.numFormat(expNeeded)}
                     </div>
                     <div class="exp-bar" style="margin-top:5px;"><div class="exp-fill" style="width:${Math.min(100,(s.exp/expNeeded)*100)}%"></div></div>
+                    ${cardInfo ? `<div style="margin-top:8px;font-size:11px;color:#ff8c00;">加成: ${cardInfo}</div>` : ''}
                 </div>
                 
                 <div class="section-title">⚔️ ${e.quality}套装</div>
@@ -439,7 +455,7 @@ let Game = {
             this.addLog('强化已达上限！');
             return;
         }
-        const costGold = Math.floor(e.enhanceCostGoldBase * Math.pow(e.enhanceCostGoldGrowth, s.equipEnhance - 1));
+        const costGold = s.equipEnhance;
         if (s.gold < costGold) {
             this.addLog('金币不足！');
             return;
@@ -465,7 +481,7 @@ let Game = {
             this.addLog('升星已达上限！');
             return;
         }
-        const costYuanbao = Math.floor(e.starCostYuanbaoBase * Math.pow(e.starCostYuanbaoGrowth, s.equipStar - 1));
+        const costYuanbao = s.equipStar;
         if (s.yuanbao < costYuanbao) {
             this.addLog('元宝不足！');
             return;
