@@ -21,24 +21,28 @@ const GameData = {
         starCostYuanbaoBase: 5,
         starCostYuanbaoGrowth: 1.2
     },
-    monsters: [
-        { level: 1, name: '小鸡', hp: 50, atk: 5, def: 2, goldDrop: 10 },
-        { level: 5, name: '鹿', hp: 200, atk: 15, def: 8, goldDrop: 50 },
-        { level: 10, name: '稻草人', hp: 800, atk: 40, def: 20, goldDrop: 200 },
-        { level: 20, name: '骷髅', hp: 3000, atk: 100, def: 50, goldDrop: 800 },
-        { level: 50, name: '沃玛战士', hp: 20000, atk: 500, def: 200, goldDrop: 5000 },
-        { level: 100, name: '祖玛卫士', hp: 100000, atk: 2000, def: 800, goldDrop: 20000 },
-        { level: 200, name: '赤月恶魔', hp: 500000, atk: 8000, def: 3000, goldDrop: 100000 },
-        { level: 500, name: '魔龙教主', hp: 3000000, atk: 30000, def: 10000, goldDrop: 500000 }
-    ],
-    bosses: [
-        { level: 10, name: '鸡王', hp: 2000, atk: 80, def: 30 },
-        { level: 30, name: '骷髅精灵', hp: 15000, atk: 400, def: 150 },
-        { level: 60, name: '沃玛教主', hp: 80000, atk: 1500, def: 600 },
-        { level: 120, name: '祖玛教主', hp: 500000, atk: 6000, def: 2500 },
-        { level: 250, name: '赤月恶魔', hp: 3000000, atk: 25000, def: 10000 },
-        { level: 500, name: '魔龙教主', hp: 20000000, atk: 100000, def: 40000 }
-    ],
+    monster: {
+        name: '怪物',
+        hpBase: 50,
+        hpGrowth: 2.0,
+        atkBase: 5,
+        atkGrowth: 1.8,
+        defBase: 2,
+        defGrowth: 1.6,
+        goldBase: 10,
+        goldGrowth: 1.5
+    },
+    boss: {
+        maxDifficulty: 10,
+        name: '教主',
+        hpMult: 50,
+        atkMult: 8,
+        defMult: 5,
+        materialBase: 10,
+        yuanbaoBasePerLevel: 10,
+        expBasePerLevel: 100,
+        rewardMult: 2
+    },
     shop: [
         { id: 'gift_pack', name: '万能礼包', icon: '🎁', price: 100, desc: '使用后获得1e4万能材料' }
     ],
@@ -62,6 +66,7 @@ const GameData = {
     },
     battle: {
         attackInterval: 800,
-        bossAttackInterval: 600
+        bossAttackInterval: 600,
+        bossCooldown: 10000
     }
 };

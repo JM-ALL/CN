@@ -231,6 +231,7 @@ let Game = {
 
     renderBossTab(container) {
         const s = this.state;
+        const b = GameData.boss;
         const cooldownLeft = this.bossBattleCooldown > Date.now() ? Math.ceil((this.bossBattleCooldown - Date.now()) / 1000) : 0;
         
         let html = `<div style="margin-bottom:10px;font-size:13px;color:#ccc;">`;
@@ -239,34 +240,40 @@ let Game = {
         } else if (cooldownLeft > 0) {
             html += `⏱️ 冷却中: ${cooldownLeft}秒`;
         } else {
-            html += `选择Boss进行挑战`;
+            html += `当前等级 Lv.${Utils.numFormat(s.level)}，选择难度挑战`;
         }
         html += `</div>`;
         
-        html += GameData.bosses.map((boss, idx) => {
-            const locked = boss.level > s.level + 50;
-            const canChallenge = !this.inBossBattle && cooldownLeft === 0 && !locked;
-            return `
-                <div class="boss-item">
-                    <div style="font-size:28px;">👹</div>
-                    <div style="flex:1;margin-left:10px;">
-                        <div style="font-weight:bold;color:#ff6b6b;">${boss.name} <span style="color:#aaa;font-size:12px;">Lv.${boss.level}</span></div>
-                        <div class="boss-reward">⚙️10材料 💎${Utils.numFormat(10*boss.level)}元宝 ⭐${Utils.numFormat(100*boss.level)}经验</div>
-                        ${locked ? '<div class="boss-hint">等级不足（需Lv.'+(boss.level-50)+'）</div>' : ''}
+        html += `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">`;
+        for (let d = 1; d <= b.maxDifficulty; d++) {
+            const mult = Math.pow(b.rewardMult, d - 1);
+            const materialR = Math.floor(b.materialBase * mult);
+            const yuanbaoR = Math.floor(b.yuanbaoBasePerLevel * s.level * mult);
+            const expR = Math.floor(b.expBasePerLevel * s.level * mult);
+            const canChallenge = !this.inBossBattle && cooldownLeft === 0;
+            html += `
+                <div class="boss-item" style="flex-direction:column;text-align:center;padding:10px;">
+                    <div style="font-size:24px;">👹</div>
+                    <div style="font-weight:bold;color:#ff6b6b;font-size:13px;">${d}阶</div>
+                    <div class="boss-reward" style="font-size:10px;margin-top:3px;">
+                        ⚙️${Utils.numFormat(materialR)}<br>
+                        💎${Utils.numFormat(yuanbaoR)}<br>
+                        ⭐${Utils.numFormat(expR)}
                     </div>
-                    <button class="welfare-btn boss-btn" style="width:90px;padding:8px;font-size:13px;" 
-                        onclick="Game.challengeBoss(${idx})" ${canChallenge ? '' : 'disabled'}>
+                    <button class="welfare-btn boss-btn" style="width:100%;padding:5px;font-size:12px;margin-top:6px;" 
+                        onclick="Game.challengeBoss(${d})" ${canChallenge ? '' : 'disabled'}>
                         挑战
                     </button>
                 </div>
             `;
-        }).join('');
+        }
+        html += `</div>`;
         
         container.innerHTML = html;
     },
 
-    challengeBoss(idx) {
-        Battle.startBossBattle(this, idx);
+    challengeBoss(difficulty) {
+        Battle.startBossBattle(this, difficulty);
         this.renderAll();
     },
 
@@ -280,7 +287,7 @@ let Game = {
         const monsterHpPercent = displayMonster ? Math.max(0, (displayMonster.currentHp / displayMonster.hp) * 100) : 100;
         const mName = displayMonster ? displayMonster.name : '寻找目标...';
         const mIsBoss = this.inBossBattle;
-        const expNeeded = s.level * 10 + Math.floor(s.level * s.level * 0.5);
+        const expNeeded = Battle.getExpNeeded(s.level);
         const expPercent = Math.min(100, (s.exp / expNeeded) * 100);
 
         area.innerHTML = `
@@ -346,7 +353,7 @@ let Game = {
         const starCostYuanbao = Math.floor(e.starCostYuanbaoBase * Math.pow(e.starCostYuanbaoGrowth, s.equipStar - 1));
         const canEnhance = s.gold >= enhanceCostGold && s.material >= 1 && s.equipEnhance < e.maxEnhance;
         const canStar = s.yuanbao >= starCostYuanbao && s.material >= 1 && s.equipStar < e.maxStar;
-        const expNeeded = s.level * 10 + Math.floor(s.level * s.level * 0.5);
+        const expNeeded = Battle.getExpNeeded(s.level);
         
         modal.innerHTML = `
             <div class="modal-header">

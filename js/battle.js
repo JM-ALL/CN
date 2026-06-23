@@ -1,16 +1,46 @@
 const Battle = {
-    selectMonster(game) {
-        const s = game.state;
-        let availableMonsters = GameData.monsters.filter(m => m.level <= Math.max(1, Math.floor(s.level * 1.2) + 3));
-        if (availableMonsters.length === 0) {
-            availableMonsters = [GameData.monsters[0]];
-        }
-        const monster = availableMonsters[availableMonsters.length - 1];
-        game.currentMonster = {
-            ...monster,
-            currentHp: monster.hp,
+    generateMonster(level) {
+        const m = GameData.monster;
+        return {
+            name: m.name,
+            level: level,
+            hp: Math.floor(m.hpBase * Math.pow(m.hpGrowth, Math.max(0, level - 1))),
+            atk: Math.floor(m.atkBase * Math.pow(m.atkGrowth, Math.max(0, level - 1))),
+            def: Math.floor(m.defBase * Math.pow(m.defGrowth, Math.max(0, level - 1))),
+            goldDrop: Math.floor(m.goldBase * Math.pow(m.goldGrowth, Math.max(0, level - 1))),
+            currentHp: 0,
             isBoss: false
         };
+    },
+
+    generateBoss(level, difficulty) {
+        const b = GameData.boss;
+        const mult = Math.pow(b.rewardMult, difficulty - 1);
+        const baseMonster = this.generateMonster(level);
+        return {
+            name: `${b.name}·${difficulty}阶`,
+            level: level,
+            difficulty: difficulty,
+            hp: Math.floor(baseMonster.hp * b.hpMult * mult),
+            atk: Math.floor(baseMonster.atk * b.atkMult * mult),
+            def: Math.floor(baseMonster.def * b.defMult * mult),
+            materialReward: Math.floor(b.materialBase * mult),
+            yuanbaoReward: Math.floor(b.yuanbaoBasePerLevel * level * mult),
+            expReward: Math.floor(b.expBasePerLevel * level * mult),
+            currentHp: 0,
+            isBoss: true
+        };
+    },
+
+    getExpNeeded(level) {
+        return level * 10;
+    },
+
+    selectMonster(game) {
+        const s = game.state;
+        const monster = this.generateMonster(s.level);
+        monster.currentHp = monster.hp;
+        game.currentMonster = monster;
     },
 
     doAttack(game) {
@@ -18,7 +48,7 @@ const Battle = {
         
         const s = game.state;
         const m = game.currentMonster;
-        if (!m) {
+        if (!m || m.level !== s.level) {
             this.selectMonster(game);
             return;
         }
@@ -48,7 +78,7 @@ const Battle = {
         s.exp += expGain;
         s.gold += m.goldDrop;
         
-        const expNeeded = s.level * 10 + Math.floor(s.level * s.level * 0.5);
+        const expNeeded = this.getExpNeeded(s.level);
         if (s.exp >= expNeeded) {
             s.exp -= expNeeded;
             s.level += 1;
@@ -57,34 +87,26 @@ const Battle = {
             game.addLog(`🎉 升级！Lv.${Utils.numFormat(s.level)}`);
         }
 
-        game.addLog(`击败${m.name} +💰${Utils.numFormat(m.goldDrop)} +⭐${Utils.numFormat(expGain)}`);
+        game.addLog(`击败怪物 +💰${Utils.numFormat(m.goldDrop)} +⭐${Utils.numFormat(expGain)}`);
         game.killCount++;
         game.saveState();
         this.selectMonster(game);
     },
 
-    startBossBattle(game, bossIndex) {
+    startBossBattle(game, difficulty) {
         if (game.inBossBattle) return;
+        if (difficulty < 1 || difficulty > GameData.boss.maxDifficulty) return;
         if (game.bossBattleCooldown && Date.now() < game.bossBattleCooldown) {
             const left = Math.ceil((game.bossBattleCooldown - Date.now()) / 1000);
             game.addLog(`Boss挑战冷却中，剩余${left}秒`);
             return;
         }
-        
-        const bossConfig = GameData.bosses[bossIndex];
-        if (!bossConfig) return;
-        
-        if (bossConfig.level > game.state.level + 50) {
-            game.addLog(`等级不足，无法挑战该Boss！`);
-            return;
-        }
 
         game.inBossBattle = true;
-        game.currentBoss = {
-            ...bossConfig,
-            currentHp: bossConfig.hp
-        };
-        game.addLog(`⚠️ 开始挑战Boss：${bossConfig.name}！`);
+        const boss = this.generateBoss(game.state.level, difficulty);
+        boss.currentHp = boss.hp;
+        game.currentBoss = boss;
+        game.addLog(`⚠️ 开始挑战${difficulty}阶Boss：${boss.name}！`);
         
         if (game.bossTimer) clearInterval(game.bossTimer);
         game.bossTimer = setInterval(() => {
@@ -119,11 +141,11 @@ const Battle = {
         const s = game.state;
         const b = game.currentBoss;
         
-        s.material += 10;
-        s.yuanbao += 10 * b.level;
-        s.exp += 100 * b.level;
+        s.material += b.materialReward;
+        s.yuanbao += b.yuanbaoReward;
+        s.exp += b.expReward;
         
-        const expNeeded = s.level * 10 + Math.floor(s.level * s.level * 0.5);
+        const expNeeded = this.getExpNeeded(s.level);
         let leveledUp = false;
         while (s.exp >= expNeeded) {
             s.exp -= expNeeded;
@@ -136,8 +158,8 @@ const Battle = {
             game.addLog(`🎉 击败Boss升级！Lv.${Utils.numFormat(s.level)}`);
         }
         
-        game.addLog(`🏆 击败${b.name}！+⚙️10材料 +💎${Utils.numFormat(10*b.level)}元宝 +⭐${Utils.numFormat(100*b.level)}经验`);
-        game.bossBattleCooldown = Date.now() + 10000;
+        game.addLog(`🏆 击败${b.name}！+⚙️${Utils.numFormat(b.materialReward)} +💎${Utils.numFormat(b.yuanbaoReward)} +⭐${Utils.numFormat(b.expReward)}`);
+        game.bossBattleCooldown = Date.now() + GameData.battle.bossCooldown;
         this.endBossBattle(game);
         game.saveState();
     },
