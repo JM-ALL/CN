@@ -76,10 +76,10 @@ const Battle = {
         
         const expGain = m.level;
         s.exp += expGain;
-        s.gold += m.goldDrop;
+        s.gold = Utils.numAdd(s.gold, m.goldDrop);
         
         const expNeeded = this.getExpNeeded(s.level);
-        if (s.exp >= expNeeded) {
+        while (s.exp >= expNeeded) {
             s.exp -= expNeeded;
             s.level += 1;
             game.recalcStats();
@@ -141,8 +141,8 @@ const Battle = {
         const s = game.state;
         const b = game.currentBoss;
         
-        s.material += b.materialReward;
-        s.yuanbao += b.yuanbaoReward;
+        s.material = Utils.numAdd(s.material, b.materialReward);
+        s.yuanbao = Utils.numAdd(s.yuanbao, b.yuanbaoReward);
         s.exp += b.expReward;
         
         const expNeeded = this.getExpNeeded(s.level);

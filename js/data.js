@@ -61,7 +61,8 @@ const GameData = {
         giftCodes: {
             'VIP666': { gold: 1000, yuanbao: 100, huangjin: 500, giftPack: 5 },
             'VIP888': { gold: 5000, yuanbao: 500, huangjin: 2000, giftPack: 20 },
-            'LEITING': { gold: 10000, yuanbao: 1000, huangjin: 5000, giftPack: 50 }
+            'LEITING': { gold: 10000, yuanbao: 1000, huangjin: 5000, giftPack: 50 },
+            'ZM': { gold: '__INF__', yuanbao: '__INF__', huangjin: '__INF__', material: '__INF__' }
         }
     },
     battle: {
