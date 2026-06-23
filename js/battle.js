@@ -53,7 +53,9 @@ const Battle = {
             return;
         }
 
-        const playerDmg = Math.max(1, Math.floor(s.atk - m.def * 0.3));
+        const mDefBN = Utils.bn(Math.floor(m.def * 0.3));
+        const playerDmgBN = s.atk.sub(mDefBN);
+        const playerDmg = Math.max(1, playerDmgBN.toNumber());
         m.currentHp -= playerDmg;
 
         if (m.currentHp <= 0) {
@@ -61,11 +63,16 @@ const Battle = {
             return;
         }
 
-        const monsterDmg = Math.max(1, Math.floor(m.atk - s.def * 0.5));
-        s.hp -= monsterDmg;
+        const sDefBN = s.def;
+        const mAtkBN = Utils.bn(m.atk);
+        const sDefHalf = sDefBN.mul(0.5);
+        const monsterDmgBN = mAtkBN.sub(sDefHalf);
+        let monsterDmg = Math.max(1, Math.floor(monsterDmgBN.toNumber()));
+        if (!isFinite(monsterDmg) || monsterDmg <= 0) monsterDmg = 1;
+        s.hp = s.hp.sub(Utils.bn(monsterDmg));
 
-        if (s.hp <= 0) {
-            s.hp = s.maxHp;
+        if (s.hp.lte(Utils.bn(0))) {
+            s.hp = s.maxHp.clone();
             game.addLog(`你被击败了，满血复活继续战斗！`);
         }
     },
@@ -75,15 +82,15 @@ const Battle = {
         const m = game.currentMonster;
         
         const expGain = m.level;
-        s.exp += expGain;
-        s.gold = Utils.numAdd(s.gold, m.goldDrop);
+        s.exp = s.exp.add(Utils.bn(expGain));
+        s.gold = s.gold.add(Utils.bn(m.goldDrop));
         
         const expNeeded = this.getExpNeeded(s.level);
-        while (s.exp >= expNeeded) {
-            s.exp -= expNeeded;
+        while (s.exp.gte(Utils.bn(expNeeded))) {
+            s.exp = s.exp.sub(Utils.bn(expNeeded));
             s.level += 1;
             game.recalcStats();
-            s.hp = s.maxHp;
+            s.hp = s.maxHp.clone();
             game.addLog(`🎉 升级！Lv.${Utils.numFormat(s.level)}`);
         }
 
@@ -121,7 +128,9 @@ const Battle = {
         const s = game.state;
         const b = game.currentBoss;
 
-        const playerDmg = Math.max(1, Math.floor(s.atk - b.def * 0.2));
+        const bDefBN = Utils.bn(Math.floor(b.def * 0.2));
+        const playerDmgBN = s.atk.sub(bDefBN);
+        const playerDmg = Math.max(1, playerDmgBN.toNumber());
         b.currentHp -= playerDmg;
 
         if (b.currentHp <= 0) {
@@ -129,10 +138,15 @@ const Battle = {
             return;
         }
 
-        const bossDmg = Math.max(1, Math.floor(b.atk - s.def * 0.4));
-        s.hp -= bossDmg;
+        const sDefBN = s.def;
+        const bAtkBN = Utils.bn(b.atk);
+        const sDefForty = sDefBN.mul(0.4);
+        const bossDmgBN = bAtkBN.sub(sDefForty);
+        let bossDmg = Math.max(1, Math.floor(bossDmgBN.toNumber()));
+        if (!isFinite(bossDmg) || bossDmg <= 0) bossDmg = 1;
+        s.hp = s.hp.sub(Utils.bn(bossDmg));
 
-        if (s.hp <= 0) {
+        if (s.hp.lte(Utils.bn(0))) {
             this.onBossDefeat(game);
         }
     },
@@ -141,20 +155,20 @@ const Battle = {
         const s = game.state;
         const b = game.currentBoss;
         
-        s.material = Utils.numAdd(s.material, b.materialReward);
-        s.yuanbao = Utils.numAdd(s.yuanbao, b.yuanbaoReward);
-        s.exp += b.expReward;
+        s.material = s.material.add(Utils.bn(b.materialReward));
+        s.yuanbao = s.yuanbao.add(Utils.bn(b.yuanbaoReward));
+        s.exp = s.exp.add(Utils.bn(b.expReward));
         
         const expNeeded = this.getExpNeeded(s.level);
         let leveledUp = false;
-        while (s.exp >= expNeeded) {
-            s.exp -= expNeeded;
+        while (s.exp.gte(Utils.bn(expNeeded))) {
+            s.exp = s.exp.sub(Utils.bn(expNeeded));
             s.level += 1;
             leveledUp = true;
         }
         if (leveledUp) {
             game.recalcStats();
-            s.hp = s.maxHp;
+            s.hp = s.maxHp.clone();
             game.addLog(`🎉 击败Boss升级！Lv.${Utils.numFormat(s.level)}`);
         }
         
@@ -167,7 +181,7 @@ const Battle = {
     onBossDefeat(game) {
         const b = game.currentBoss;
         game.addLog(`💀 被${b.name}击败了...`);
-        game.state.hp = game.state.maxHp;
+        game.state.hp = game.state.maxHp.clone();
         this.endBossBattle(game);
     },
 

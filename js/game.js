@@ -10,39 +10,34 @@ let Game = {
     bossBattleCooldown: 0,
 
     init() {
-        document.getElementById('modalOverlay').addEventListener('click', (e) => {
-            if (e.target.id === 'modalOverlay') this.closeModal();
-        });
-        
         this.loadState();
         this.selectMonster();
-        this.renderAll();
         this.startBattle();
-        this.startAutoSave();
+        this.renderAll();
         
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'r' && e.ctrlKey && e.shiftKey) {
-                if (confirm('确定要重置存档吗？')) {
-                    Utils.clearSave();
-                    location.reload();
-                }
+        setInterval(() => {
+            if (this.bossBattleCooldown > 0 && Date.now() > this.bossBattleCooldown) {
+                this.bossBattleCooldown = 0;
             }
-        });
+            this.renderAll();
+            this.saveState();
+        }, 1000);
     },
 
     getInitialState() {
+        const p = GameData.player;
         return {
-            level: GameData.player.initLevel,
-            exp: 0,
-            hp: GameData.player.initHp,
-            maxHp: GameData.player.initHp,
-            atk: GameData.player.initAtk,
-            def: GameData.player.initDef,
-            power: 0,
-            gold: 0,
-            yuanbao: 0,
-            huangjin: 0,
-            material: 0,
+            level: p.initLevel,
+            exp: Utils.bn(0),
+            hp: Utils.bn(p.initHp),
+            maxHp: Utils.bn(p.initHp),
+            atk: Utils.bn(p.initAtk),
+            def: Utils.bn(p.initDef),
+            power: Utils.bn(0),
+            gold: Utils.bn(0),
+            yuanbao: Utils.bn(0),
+            huangjin: Utils.bn(0),
+            material: Utils.bn(0),
             giftPack: 1,
             equipEnhance: 1,
             equipStar: 1,
@@ -59,7 +54,15 @@ let Game = {
     loadState() {
         const saved = Utils.loadGame();
         if (saved) {
-            this.state = { ...this.getInitialState(), ...saved };
+            const init = this.getInitialState();
+            this.state = Object.assign({}, init, saved);
+            ['gold','yuanbao','huangjin','material','hp','maxHp','atk','def','power','exp'].forEach(k => {
+                if (this.state[k] === null || this.state[k] === undefined) {
+                    this.state[k] = Utils.bn(0);
+                } else if (!(this.state[k] instanceof BigNum)) {
+                    this.state[k] = Utils.bn(this.state[k]);
+                }
+            });
         } else {
             this.state = this.getInitialState();
         }
@@ -91,13 +94,13 @@ let Game = {
         if (s.hasPermanentCard) mult *= 1e5;
         if (s.hasSupremeCard) mult *= 1e10;
         
-        s.maxHp = Math.floor((baseHp + equipHp) * mult);
-        s.atk = Math.floor((baseAtk + equipAtk) * mult);
-        s.def = Math.floor((baseDef + equipDef) * mult);
-        s.power = s.maxHp + s.atk * 10 + s.def * 5;
+        s.maxHp = Utils.bn(Math.floor((baseHp + equipHp) * mult));
+        s.atk = Utils.bn(Math.floor((baseAtk + equipAtk) * mult));
+        s.def = Utils.bn(Math.floor((baseDef + equipDef) * mult));
+        s.power = s.maxHp.add(s.atk.mul(10)).add(s.def.mul(5));
         
-        if (s.hp > s.maxHp) s.hp = s.maxHp;
-        if (s.hp <= 0) s.hp = s.maxHp;
+        if (s.hp.gt(s.maxHp)) s.hp = s.maxHp.clone();
+        if (s.hp.lte(0)) s.hp = s.maxHp.clone();
     },
 
     addLog(msg) {
@@ -114,14 +117,11 @@ let Game = {
     startBattle() {
         if (this.battleTimer) clearInterval(this.battleTimer);
         this.battleTimer = setInterval(() => {
-            Battle.doAttack(this);
-            this.renderBattleArea();
-            this.renderTopBar();
+            if (!this.inBossBattle) {
+                Battle.doAttack(this);
+                this.renderAll();
+            }
         }, GameData.battle.attackInterval);
-    },
-
-    startAutoSave() {
-        setInterval(() => this.saveState(), 5000);
     },
 
     renderAll() {
@@ -132,12 +132,24 @@ let Game = {
 
     renderTopBar() {
         const s = this.state;
-        const topBar = document.getElementById('topBar');
-        topBar.innerHTML = `
-            <div class="stat-item"><span class="stat-icon">⚔️</span><span>${Utils.numFormat(s.power)}</span></div>
-            <div class="stat-item"><span class="stat-icon">💰</span><span>${Utils.numFormat(s.gold)}</span></div>
-            <div class="stat-item"><span class="stat-icon">💎</span><span>${Utils.numFormat(s.yuanbao)}</span></div>
-            <div class="stat-item"><span class="stat-icon">🏆</span><span>${Utils.numFormat(s.huangjin)}</span></div>
+        const bar = document.getElementById('topBar');
+        bar.innerHTML = `
+            <div class="stat-item">
+                <span class="stat-icon">⚔️</span>
+                <span>${Utils.numFormat(s.power)}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">💰</span>
+                <span>${Utils.numFormat(s.gold)}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">💎</span>
+                <span>${Utils.numFormat(s.yuanbao)}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">🏆</span>
+                <span>${Utils.numFormat(s.huangjin)}</span>
+            </div>
         `;
     },
 
@@ -185,9 +197,11 @@ let Game = {
         const e = GameData.equip;
         const enhanceCostGold = s.equipEnhance;
         const starCostYuanbao = s.equipStar;
-        const canEnhance = s.gold >= enhanceCostGold && s.material >= 1 && s.equipEnhance < e.maxEnhance;
-        const canStar = s.yuanbao >= starCostYuanbao && s.material >= 1 && s.equipStar < e.maxStar;
+        const canEnhance = s.gold.gte(Utils.bn(enhanceCostGold)) && s.material.gte(Utils.bn(1)) && s.equipEnhance < e.maxEnhance;
+        const canStar = s.yuanbao.gte(Utils.bn(starCostYuanbao)) && s.material.gte(Utils.bn(1)) && s.equipStar < e.maxStar;
         const expNeeded = Battle.getExpNeeded(s.level);
+        const expRatio = s.exp.div(Utils.bn(expNeeded));
+        const expPercent = Math.max(0, Math.min(100, expRatio.m * Math.pow(10, expRatio.e) * 100));
         
         let cardInfo = '';
         if (s.hasPermanentCard && s.hasSupremeCard) {
@@ -209,7 +223,7 @@ let Game = {
                     <div style="margin-top:5px;font-size:12px;color:#aaa;">
                         经验: ${Utils.numFormat(s.exp)}/${Utils.numFormat(expNeeded)}
                     </div>
-                    <div class="exp-bar" style="margin-top:5px;"><div class="exp-fill" style="width:${Math.min(100,(s.exp/expNeeded)*100)}%"></div></div>
+                    <div class="exp-bar" style="margin-top:5px;"><div class="exp-fill" style="width:${expPercent}%"></div></div>
                     ${cardInfo ? `<div style="margin-top:8px;font-size:11px;color:#ff8c00;">加成: ${cardInfo}</div>` : ''}
                 </div>
                 
@@ -252,20 +266,21 @@ let Game = {
                 <button class="close-btn" onclick="Game.closeModal()">✕</button>
             </div>
             <div class="modal-body">
+                <div class="section-title">📦 道具</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+                    <div class="bag-item">
+                        <div style="font-size:28px;">🎁</div>
+                        <div style="font-weight:bold;font-size:13px;margin-top:4px;">万能礼包</div>
+                        <div style="font-size:11px;color:#999;margin-top:2px;">×${Utils.numFormat(s.giftPack)}</div>
+                        <button class="use-btn" onclick="Game.useGiftPack()" ${s.giftPack < 1 ? 'disabled' : ''}>使用</button>
+                    </div>
+                </div>
+                
+                <div class="section-title" style="margin-top:15px;">💰 资源</div>
                 <div class="attr-row"><span class="attr-label">💰 金币</span><span class="attr-value">${Utils.numFormat(s.gold)}</span></div>
                 <div class="attr-row"><span class="attr-label">💎 元宝</span><span class="attr-value">${Utils.numFormat(s.yuanbao)}</span></div>
                 <div class="attr-row"><span class="attr-label">🏆 黄金</span><span class="attr-value">${Utils.numFormat(s.huangjin)}</span></div>
                 <div class="attr-row"><span class="attr-label">⚙️ 万能材料</span><span class="attr-value">${Utils.numFormat(s.material)}</span></div>
-                
-                <div class="section-title">📦 物品</div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;">
-                    <div class="bag-item" onclick="Game.useGiftPack()" style="${s.giftPack < 1 ? 'opacity:0.5;' : ''}">
-                        <div style="font-size:36px;">🎁</div>
-                        <div style="font-size:12px;margin-top:4px;">万能礼包</div>
-                        <div style="color:#ffd700;font-size:12px;font-weight:bold;">x${Utils.numFormat(s.giftPack)}</div>
-                        <button class="use-btn" ${s.giftPack < 1 ? 'disabled style="opacity:0.5;"' : ''}>使用</button>
-                    </div>
-                </div>
             </div>
         `;
     },
@@ -337,7 +352,7 @@ let Game = {
                                 <div style="font-weight:bold;">${item.name}</div>
                                 <div style="font-size:12px;color:#999;">${item.desc}</div>
                             </div>
-                            <button class="shop-buy-btn" onclick="Game.buyItem('${item.id}')" ${s.huangjin < item.price ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+                            <button class="shop-buy-btn" onclick="Game.buyItem('${item.id}')" ${s.huangjin.gte(Utils.bn(item.price)) ? '' : 'disabled'}>
                                 🏆${Utils.numFormat(item.price)}
                             </button>
                         </div>
@@ -411,12 +426,32 @@ let Game = {
         
         const area = document.getElementById('battleArea');
         
-        const playerHpPercent = Math.max(0, (s.hp / s.maxHp) * 100);
-        const monsterHpPercent = displayMonster ? Math.max(0, (displayMonster.currentHp / displayMonster.hp) * 100) : 100;
-        const mName = displayMonster ? displayMonster.name : '寻找目标...';
-        const mIsBoss = this.inBossBattle;
+        const playerHpPercent = (() => {
+            if (s.maxHp.isZero()) return 100;
+            if (s.hp.e >= 300 || s.maxHp.e >= 300) return 100;
+            const ratio = s.hp.div(s.maxHp);
+            const pct = ratio.m * Math.pow(10, ratio.e) * 100;
+            return Math.max(0, Math.min(100, pct));
+        })();
+        
+        let monsterHpPercent = 100;
+        let mName = '寻找目标...';
+        let mIsBoss = this.inBossBattle;
+        let mHpDisplay = '0';
+        let mMaxHpDisplay = '0';
+        
+        if (displayMonster) {
+            const maxHp = displayMonster.hp;
+            const curHp = Math.max(0, displayMonster.currentHp);
+            monsterHpPercent = Math.max(0, (curHp / maxHp) * 100);
+            mName = displayMonster.name;
+            mHpDisplay = Utils.numFormat(Math.floor(curHp));
+            mMaxHpDisplay = Utils.numFormat(maxHp);
+        }
+        
         const expNeeded = Battle.getExpNeeded(s.level);
-        const expPercent = Math.min(100, (s.exp / expNeeded) * 100);
+        const expRatio = s.exp.div(Utils.bn(expNeeded));
+        const expPercent = Math.max(0, Math.min(100, expRatio.m * Math.pow(10, expRatio.e) * 100));
 
         area.innerHTML = `
             <div style="text-align:center;font-size:12px;color:#aaa;margin-bottom:5px;">
@@ -429,7 +464,7 @@ let Game = {
                     <div class="char-name">玩家</div>
                     <div class="hp-bar">
                         <div class="hp-fill" style="width:${playerHpPercent}%"></div>
-                        <div class="hp-text">${Utils.numFormat(Math.floor(Math.max(0,s.hp)))}/${Utils.numFormat(s.maxHp)}</div>
+                        <div class="hp-text">${Utils.numFormat(s.hp.floor())}/${Utils.numFormat(s.maxHp)}</div>
                     </div>
                 </div>
                 <div class="vs-text">VS</div>
@@ -438,7 +473,7 @@ let Game = {
                     <div class="char-name" style="${mIsBoss ? 'color:#ff4444;' : ''}">${mName}${mIsBoss ? ' [BOSS]' : ''}</div>
                     <div class="hp-bar">
                         <div class="hp-fill ${mIsBoss ? 'boss-hp' : ''}" style="width:${monsterHpPercent}%"></div>
-                        <div class="hp-text">${displayMonster ? Utils.numFormat(Math.floor(Math.max(0,displayMonster.currentHp))) : '0'}/${displayMonster ? Utils.numFormat(displayMonster.hp) : '0'}</div>
+                        <div class="hp-text">${mHpDisplay}/${mMaxHpDisplay}</div>
                     </div>
                 </div>
             </div>
@@ -456,16 +491,16 @@ let Game = {
             return;
         }
         const costGold = s.equipEnhance;
-        if (s.gold < costGold) {
+        if (!Utils.canAfford(s.gold, costGold)) {
             this.addLog('金币不足！');
             return;
         }
-        if (s.material < 1) {
+        if (!Utils.canAfford(s.material, 1)) {
             this.addLog('万能材料不足！');
             return;
         }
-        s.gold -= costGold;
-        s.material -= 1;
+        s.gold = s.gold.sub(Utils.bn(costGold));
+        s.material = s.material.sub(Utils.bn(1));
         s.equipEnhance += 1;
         this.recalcStats();
         this.addLog(`✨ 强化成功！+${Utils.numFormat(s.equipEnhance)}`);
@@ -482,16 +517,16 @@ let Game = {
             return;
         }
         const costYuanbao = s.equipStar;
-        if (s.yuanbao < costYuanbao) {
+        if (!Utils.canAfford(s.yuanbao, costYuanbao)) {
             this.addLog('元宝不足！');
             return;
         }
-        if (s.material < 1) {
+        if (!Utils.canAfford(s.material, 1)) {
             this.addLog('万能材料不足！');
             return;
         }
-        s.yuanbao -= costYuanbao;
-        s.material -= 1;
+        s.yuanbao = s.yuanbao.sub(Utils.bn(costYuanbao));
+        s.material = s.material.sub(Utils.bn(1));
         s.equipStar += 1;
         this.recalcStats();
         this.addLog(`⭐ 升星成功！★${Utils.numFormat(s.equipStar)}`);
@@ -507,7 +542,7 @@ let Game = {
             return;
         }
         s.giftPack -= 1;
-        s.material += 10000;
+        s.material = s.material.add(Utils.bn(10000));
         this.addLog('🎁 使用万能礼包！+1.00e4万能材料');
         this.saveState();
         this.renderAll();
@@ -524,9 +559,9 @@ let Game = {
         const dayIdx = Math.min(((s.signInDays - 1) % 7), 6);
         const reward = GameData.welfare.signInRewards.find(r => r.day === Math.min(dayIdx + 1, 7)) || GameData.welfare.signInRewards[0];
         
-        s.gold += reward.gold;
-        s.yuanbao += reward.yuanbao;
-        s.material += reward.material;
+        s.gold = s.gold.add(Utils.bn(reward.gold));
+        s.yuanbao = s.yuanbao.add(Utils.bn(reward.yuanbao));
+        s.material = s.material.add(Utils.bn(reward.material));
         s.giftPack += reward.giftPack;
         
         this.addLog(`📅 签到成功！第${dayIdx+1}天`);
@@ -538,12 +573,13 @@ let Game = {
     buyPermanentCard() {
         const s = this.state;
         const price = GameData.welfare.permanentCard.price;
-        if (s.huangjin < price) {
+        if (!Utils.canAfford(s.huangjin, price)) {
             this.addLog('黄金不足！');
             return;
         }
-        s.huangjin -= price;
+        s.huangjin = s.huangjin.sub(Utils.bn(price));
         s.hasPermanentCard = true;
+        this.recalcStats();
         this.addLog('💳 永久卡激活成功！');
         this.saveState();
         this.renderAll();
@@ -553,12 +589,13 @@ let Game = {
     buySupremeCard() {
         const s = this.state;
         const price = GameData.welfare.supremeCard.price;
-        if (s.huangjin < price) {
+        if (!Utils.canAfford(s.huangjin, price)) {
             this.addLog('黄金不足！');
             return;
         }
-        s.huangjin -= price;
+        s.huangjin = s.huangjin.sub(Utils.bn(price));
         s.hasSupremeCard = true;
+        this.recalcStats();
         this.addLog('👑 至尊永久卡激活成功！');
         this.saveState();
         this.renderAll();
@@ -571,25 +608,26 @@ let Game = {
         if (s.lastCardClaimDate === today) return;
         
         s.lastCardClaimDate = today;
-        let totalGold = 0, totalYuanbao = 0, totalMaterial = 0, totalGiftPack = 0;
+        let totalGold = Utils.bn(0), totalYuanbao = Utils.bn(0), totalMaterial = Utils.bn(0);
+        let totalGiftPack = 0;
         
         if (s.hasPermanentCard) {
             const p = GameData.welfare.permanentCard;
-            totalGold += p.goldDaily;
-            totalYuanbao += p.yuanbaoDaily;
-            totalMaterial += p.materialDaily;
+            totalGold = totalGold.add(Utils.bn(p.goldDaily));
+            totalYuanbao = totalYuanbao.add(Utils.bn(p.yuanbaoDaily));
+            totalMaterial = totalMaterial.add(Utils.bn(p.materialDaily));
         }
         if (s.hasSupremeCard) {
             const sp = GameData.welfare.supremeCard;
-            totalGold += sp.goldDaily;
-            totalYuanbao += sp.yuanbaoDaily;
-            totalMaterial += sp.materialDaily;
+            totalGold = totalGold.add(Utils.bn(sp.goldDaily));
+            totalYuanbao = totalYuanbao.add(Utils.bn(sp.yuanbaoDaily));
+            totalMaterial = totalMaterial.add(Utils.bn(sp.materialDaily));
             totalGiftPack += sp.giftPackDaily;
         }
         
-        s.gold += totalGold;
-        s.yuanbao += totalYuanbao;
-        s.material += totalMaterial;
+        s.gold = s.gold.add(totalGold);
+        s.yuanbao = s.yuanbao.add(totalYuanbao);
+        s.material = s.material.add(totalMaterial);
         s.giftPack += totalGiftPack;
         
         this.addLog('💳 领取每日卡奖励！');
@@ -616,10 +654,20 @@ let Game = {
         }
         
         s.usedGiftCodes.push(code);
-        s.gold += reward.gold || 0;
-        s.yuanbao += reward.yuanbao || 0;
-        s.huangjin += reward.huangjin || 0;
-        s.giftPack += reward.giftPack || 0;
+        
+        const addRes = (key, val) => {
+            if (val === '__INF__' || val === 'INF') {
+                s[key] = new BigNum(1, 9999);
+            } else if (val !== undefined && val !== null) {
+                s[key] = s[key].add(Utils.bn(val));
+            }
+        };
+        
+        addRes('gold', reward.gold);
+        addRes('yuanbao', reward.yuanbao);
+        addRes('huangjin', reward.huangjin);
+        addRes('material', reward.material);
+        s.giftPack += (reward.giftPack || 0);
         
         this.addLog(`🎁 兑换成功：${code}`);
         input.value = '';
@@ -633,12 +681,12 @@ let Game = {
         const item = GameData.shop.find(i => i.id === itemId);
         if (!item) return;
         
-        if (s.huangjin < item.price) {
+        if (!Utils.canAfford(s.huangjin, item.price)) {
             this.addLog('黄金不足！');
             return;
         }
         
-        s.huangjin -= item.price;
+        s.huangjin = s.huangjin.sub(Utils.bn(item.price));
         if (itemId === 'gift_pack') {
             s.giftPack += 1;
             this.addLog(`🛒 购买成功：${item.name}`);
